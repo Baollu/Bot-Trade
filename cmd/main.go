@@ -2,6 +2,7 @@ package main
 
 import (
 	"back-end/internal/ingestion"
+	"back-end/internal/storage"
 	"fmt"
 	"os"
 	"os/signal"
@@ -10,6 +11,7 @@ import (
 func main() {
 	fmt.Println("Server starting...")
 
+	storage.InitRedis()
 	go ingestion.ConnectBinance()
 
 	interrupt := make(chan os.Signal, 1)
