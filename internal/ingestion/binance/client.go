@@ -1,6 +1,8 @@
-package ingestion
+package binance
 
 import (
+	"bot-trade/internal/ingestion/redis"
+	"context"
 	"encoding/json"
 	"log"
 	"strconv"
@@ -47,6 +49,8 @@ func ConnectBinance() {
 	}
 	log.Printf("Subscription request sent for: %s", symbol)
 
+	ctx := context.Background()
+
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
@@ -71,6 +75,15 @@ func ConnectBinance() {
 		if err != nil {
 			log.Println("Error parsing price:", err)
 			continue
+		}
+
+		if redis.Client != nil {
+			err = redis.Client.RPush(ctx, "market_data:btcusdt", price).Err()
+			if err != nil {
+				log.Println("Redis Push Error:", err)
+			} else {
+				redis.Client.LTrim(ctx, "market_data:btcusdt", -1000, -1)
+			}
 		}
 
 		log.Printf("💰 PRICE: %.2f $ | ⏱️ Time: %d", price, event.Time)
