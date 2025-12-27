@@ -27,14 +27,14 @@ type TradeEvent struct {
 	Time      int64  `json:"T"`
 }
 
-func ConnectBinance() {
+func ConnectBinance(priceChan chan<- float64) {
 	conn, _, err := websocket.DefaultDialer.Dial(binanceBaseURL, nil)
 	if err != nil {
 		log.Fatal("Error connecting to Binance:", err)
 	}
 	defer conn.Close()
 
-	log.Println("Connected to Binance server")
+	log.Println("✅ Connecté au serveur Binance WebSocket")
 
 	symbol := "btcusdt"
 	subscription := SubscribeMessage{
@@ -47,7 +47,7 @@ func ConnectBinance() {
 	if err != nil {
 		log.Fatal("Error sending subscription:", err)
 	}
-	log.Printf("Subscription request sent for: %s", symbol)
+	log.Printf("📡 Abonnement envoyé: %s", symbol)
 
 	ctx := context.Background()
 
@@ -77,6 +77,7 @@ func ConnectBinance() {
 			continue
 		}
 
+		// Stockage dans Redis
 		if redis.Client != nil {
 			err = redis.Client.RPush(ctx, "market_data:btcusdt", price).Err()
 			if err != nil {
@@ -86,6 +87,16 @@ func ConnectBinance() {
 			}
 		}
 
-		log.Printf("💰 PRICE: %.2f $ | ⏱️ Time: %d", price, event.Time)
+		// Envoi dans le canal de prix
+		select {
+		case priceChan <- price:
+		default:
+			// Canal plein, on ignore ce prix
+		}
+
+		// Log occasionnel pour ne pas spammer
+		if event.Time%10000 == 0 {
+			log.Printf("💰 PRIX: %.2f $", price)
+		}
 	}
 }

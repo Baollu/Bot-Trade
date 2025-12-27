@@ -1,19 +1,75 @@
+version: '3.8'
+
 services:
+  # PostgreSQL - Base de données froide
   db:
     image: postgres:16
     container_name: nexus_db
     environment:
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
       - POSTGRES_DB=nexus_trade_db
     ports:
       - "5433:5432"
     volumes:
       - ./db:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nexus-network
 
+  # Redis - Base de données chaude (cache)
   redis:
     image: redis:7-alpine
     container_name: nexus_redis
     ports:
       - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - nexus-network
+
+  # Application Nexus Trade (optionnel, si vous voulez tout conteneuriser)
+  # app:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: nexus_app
+  #   environment:
+  #     - DB_HOST=db
+  #     - DB_PORT=5432
+  #     - DB_USER=${DB_USER:-postgres}
+  #     - DB_PASSWORD=${DB_PASSWORD:-postgres}
+  #     - DB_NAME=nexus_trade_db
+  #     - SEPOLIA_RPC_URL=${SEPOLIA_RPC_URL}
+  #     - PRIVATE_KEY=${PRIVATE_KEY}
+  #   ports:
+  #     - "8080:8080"
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   networks:
+  #     - nexus-network
+  #   volumes:
+  #     - ./ai:/app/ai
+  #   restart: unless-stopped
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  nexus-network:
+    driver: bridge

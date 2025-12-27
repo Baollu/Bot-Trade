@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -20,32 +21,51 @@ import (
 )
 
 const (
-	SYMBOL          = "btcusdt"
 	INITIAL_BALANCE = 10000.0 // Balance initiale en USD
 	WEB_PORT        = "8080"
 )
 
+// CryptoConfig représente la configuration pour une crypto
+type CryptoConfig struct {
+	Symbol         string
+	InitialBalance float64
+}
+
+// Cryptos à trader (tu peux en ajouter autant que tu veux !)
+var CRYPTOS = []CryptoConfig{
+	{Symbol: "btcusdt", InitialBalance: 5000.0},   // Bitcoin
+	{Symbol: "ethusdt", InitialBalance: 3000.0},   // Ethereum
+	{Symbol: "solusdt", InitialBalance: 1000.0},   // Solana
+	{Symbol: "adausdt", InitialBalance: 500.0},    // Cardano
+	{Symbol: "dogeusdt", InitialBalance: 500.0},   // Dogecoin
+}
+
+// TradingSystem représente un système de trading pour une crypto
+type TradingSystem struct {
+	Symbol         string
+	Analyzer       *analyzer.AIAnalyzer
+	TradingEngine  *trader.TradingEngine
+	PriceChan      chan float64
+	PredictionChan chan *analyzer.Prediction
+}
+
 func main() {
 	fmt.Println(banner())
-	log.Println("🚀 Démarrage de Nexus Trade...")
+	log.Println("🚀 Démarrage de Nexus Trade - MULTI-CRYPTO EDITION...")
 
 	// Chargement des variables d'environnement
 	if err := godotenv.Load(); err != nil {
 		log.Println("⚠️ Fichier .env non trouvé, utilisation des variables système")
 	}
 
-	// 1. Initialisation de Redis (stockage chaud)
+	// 1. Initialisation de Redis
 	log.Println("\n" + strings.Repeat("=", 60))
 	log.Println("MODULE A: L'OBSERVATEUR (Data Ingestion)")
 	log.Println(strings.Repeat("=", 60))
 	
 	redis.InitRedis()
-	
-	// Canaux de communication entre modules
-	priceChan := make(chan float64, 100)
-	predictionChan := make(chan *analyzer.Prediction, 10)
 
-	// 2. Connexion à PostgreSQL (stockage froid)
+	// 2. Connexion à PostgreSQL
 	log.Println("\n" + strings.Repeat("=", 60))
 	log.Println("INITIALISATION - Base de Données")
 	log.Println(strings.Repeat("=", 60))
@@ -63,7 +83,7 @@ func main() {
 	}
 	log.Printf("👤 Utilisateur: %s (ID: %d)", user.Email, user.ID)
 
-	// 3. Initialisation de la Blockchain (auditeur)
+	// 3. Initialisation de la Blockchain
 	log.Println("\n" + strings.Repeat("=", 60))
 	log.Println("MODULE D: LE NOTAIRE (Web3 Audit)")
 	log.Println(strings.Repeat("=", 60))
@@ -74,55 +94,92 @@ func main() {
 	}
 	defer bc.Close()
 
-	// 4. Initialisation de l'Analyseur IA
+	// 4. Initialisation des systèmes de trading pour chaque crypto
 	log.Println("\n" + strings.Repeat("=", 60))
-	log.Println("MODULE B: L'ANALYSTE (AI Prediction)")
+	log.Println("INITIALISATION - SYSTÈMES MULTI-CRYPTO")
 	log.Println(strings.Repeat("=", 60))
-	
-	aiAnalyzer, err := analyzer.NewAIAnalyzer(redis.Client, SYMBOL)
-	if err != nil {
-		log.Fatalf("❌ Erreur analyseur IA: %v", err)
+
+	var tradingSystems []*TradingSystem
+	var wg sync.WaitGroup
+
+	for _, crypto := range CRYPTOS {
+		log.Printf("\n🪙 Configuration: %s (Balance: $%.2f)", 
+			strings.ToUpper(crypto.Symbol), crypto.InitialBalance)
+
+		// Canaux de communication
+		priceChan := make(chan float64, 100)
+		predictionChan := make(chan *analyzer.Prediction, 10)
+
+		// Analyseur IA
+		aiAnalyzer, err := analyzer.NewAIAnalyzer(redis.Client, crypto.Symbol)
+		if err != nil {
+			log.Printf("⚠️ Erreur analyseur IA pour %s: %v", crypto.Symbol, err)
+			continue
+		}
+
+		// Moteur de trading
+		tradingEngine := trader.NewTradingEngine(
+			user.ID,
+			crypto.InitialBalance,
+			db,
+			bc,
+			strings.ToUpper(crypto.Symbol),
+		)
+
+		// Sauvegarde du système
+		tradingSystems = append(tradingSystems, &TradingSystem{
+			Symbol:         crypto.Symbol,
+			Analyzer:       aiAnalyzer,
+			TradingEngine:  tradingEngine,
+			PriceChan:      priceChan,
+			PredictionChan: predictionChan,
+		})
+
+		log.Printf("✅ Système configuré pour %s", strings.ToUpper(crypto.Symbol))
 	}
 
-	// 5. Initialisation du Moteur de Trading
+	// 5. Initialisation du Serveur Web
 	log.Println("\n" + strings.Repeat("=", 60))
-	log.Println("MODULE C: LE TRADER (Execution Engine)")
+	log.Println("INTERFACE - Dashboard Web Multi-Crypto")
 	log.Println(strings.Repeat("=", 60))
 	
-	tradingEngine := trader.NewTradingEngine(
-		user.ID,
-		INITIAL_BALANCE,
-		db,
-		bc,
-		"BTCUSDT",
-	)
+	// On va agréger tous les systèmes pour le dashboard
+	// (pour l'instant on utilise le premier, mais tu peux étendre)
+	webServer := web.NewServer(WEB_PORT, db, redis.Client, tradingSystems[0].TradingEngine)
 
-	// 6. Initialisation du Serveur Web
+	// 6. Démarrage des goroutines pour chaque crypto
 	log.Println("\n" + strings.Repeat("=", 60))
-	log.Println("INTERFACE - Dashboard Web")
-	log.Println(strings.Repeat("=", 60))
-	
-	webServer := web.NewServer(WEB_PORT, db, redis.Client, tradingEngine)
-
-	// 7. Démarrage des goroutines
-	log.Println("\n" + strings.Repeat("=", 60))
-	log.Println("DÉMARRAGE DES MODULES")
+	log.Println("DÉMARRAGE DES SYSTÈMES DE TRADING")
 	log.Println(strings.Repeat("=", 60))
 
-	// 7a. Ingestion des données Binance
-	go binance.ConnectBinance(priceChan)
-	time.Sleep(2 * time.Second) // Attendre l'initialisation
+	for _, system := range tradingSystems {
+		wg.Add(1)
+		
+		// Lancement du système dans une goroutine
+		go func(sys *TradingSystem) {
+			defer wg.Done()
+			
+			log.Printf("🚀 Démarrage du système pour %s", strings.ToUpper(sys.Symbol))
 
-	// 7b. Analyse IA toutes les minutes
-	go aiAnalyzer.RunAnalysisLoop(predictionChan)
+			// Ingestion Binance
+			go binance.ConnectBinance(sys.PriceChan, sys.Symbol)
+			time.Sleep(1 * time.Second)
 
-	// 7c. Moteur de trading
-	go tradingEngine.RunTradingLoop(predictionChan, priceChan)
+			// Analyse IA toutes les minutes
+			go sys.Analyzer.RunAnalysisLoop(sys.PredictionChan)
 
-	// 7d. Mise à jour du serveur web
-	go webServer.RunUpdateLoop(priceChan, predictionChan)
+			// Moteur de trading
+			go sys.TradingEngine.RunTradingLoop(sys.PredictionChan, sys.PriceChan)
 
-	// 7e. Serveur web (bloquant)
+			// Mise à jour du serveur web (seulement pour le premier système pour l'instant)
+			// TODO: Étendre le dashboard pour afficher toutes les cryptos
+			if sys.Symbol == tradingSystems[0].Symbol {
+				go webServer.RunUpdateLoop(sys.PriceChan, sys.PredictionChan)
+			}
+		}(system)
+	}
+
+	// 7. Serveur web
 	go func() {
 		if err := webServer.Start(); err != nil {
 			log.Fatalf("❌ Erreur serveur web: %v", err)
@@ -131,7 +188,7 @@ func main() {
 
 	// Affichage du résumé de démarrage
 	time.Sleep(3 * time.Second)
-	printStartupSummary()
+	printMultiCryptoSummary(tradingSystems)
 
 	// 8. Gestion de l'arrêt gracieux
 	sigChan := make(chan os.Signal, 1)
@@ -140,15 +197,19 @@ func main() {
 	<-sigChan
 	log.Println("\n\n🛑 Arrêt du système...")
 
-	// Affichage du résumé final
-	currentPrice := 0.0
-	select {
-	case currentPrice = <-priceChan:
-	default:
-	}
+	// Affichage du résumé final pour chaque crypto
+	for _, system := range tradingSystems {
+		var currentPrice float64
+		select {
+		case currentPrice = <-system.PriceChan:
+		default:
+			currentPrice = 0
+		}
 
-	if currentPrice > 0 {
-		tradingEngine.PrintSummary(currentPrice)
+		if currentPrice > 0 {
+			log.Printf("\n📊 Performance %s:", strings.ToUpper(system.Symbol))
+			system.TradingEngine.PrintSummary(currentPrice)
+		}
 	}
 
 	log.Println("✅ Nexus Trade arrêté proprement")
@@ -172,40 +233,42 @@ func banner() string {
 ║            ██║   ██║  ██║██║  ██║██████╔╝███████╗           ║
 ║            ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝           ║
 ║                                                               ║
-║     Système de Trading Autonome propulsé par IA v1.0         ║
+║     Système Multi-Crypto propulsé par IA v2.0                ║
 ║                                                               ║
 ╚═══════════════════════════════════════════════════════════════╝
 `
 }
 
-func printStartupSummary() {
+func printMultiCryptoSummary(systems []*TradingSystem) {
 	fmt.Println("\n" + strings.Repeat("=", 60))
-	fmt.Println("✅ SYSTÈME OPÉRATIONNEL")
+	fmt.Println("✅ SYSTÈME MULTI-CRYPTO OPÉRATIONNEL")
 	fmt.Println(strings.Repeat("=", 60))
 	fmt.Println()
-	fmt.Println("🤖 Modules actifs:")
-	fmt.Println("   [✓] Observateur    - Ingestion de données Binance")
-	fmt.Println("   [✓] Analyste      - Prédictions IA toutes les minutes")
-	fmt.Println("   [✓] Trader        - Exécution automatique des ordres")
-	fmt.Println("   [✓] Notaire       - Audit blockchain sur Sepolia")
-	fmt.Println("   [✓] Dashboard     - Interface web en temps réel")
+	fmt.Printf("🪙 Cryptomonnaies tradées: %d\n", len(systems))
+	fmt.Println()
+	
+	for i, sys := range systems {
+		portfolio := sys.TradingEngine.GetPortfolio()
+		fmt.Printf("  %d. %s - Balance initiale: $%.2f\n", 
+			i+1, strings.ToUpper(sys.Symbol), portfolio.InitialBalance)
+	}
+	
+	fmt.Println()
+	fmt.Println("🤖 Modules actifs (par crypto):")
+	fmt.Println("   [✓] Observateur    - Ingestion données Binance")
+	fmt.Println("   [✓] Analyste       - Prédictions IA/minute")
+	fmt.Println("   [✓] Trader         - Exécution auto ordres")
+	fmt.Println("   [✓] Notaire        - Audit blockchain Sepolia")
 	fmt.Println()
 	fmt.Println("🌐 Accès au Dashboard:")
 	fmt.Println("   → http://localhost:" + WEB_PORT)
 	fmt.Println()
-	fmt.Println("📊 APIs disponibles:")
-	fmt.Println("   → http://localhost:" + WEB_PORT + "/api/dashboard")
-	fmt.Println("   → http://localhost:" + WEB_PORT + "/api/price")
-	fmt.Println("   → http://localhost:" + WEB_PORT + "/api/prediction")
-	fmt.Println("   → http://localhost:" + WEB_PORT + "/api/portfolio")
-	fmt.Println("   → http://localhost:" + WEB_PORT + "/api/trades")
-	fmt.Println()
-	fmt.Println("💡 Le système trade automatiquement quand:")
-	fmt.Println("   - La confiance de l'IA > 65%")
-	fmt.Println("   - Le mouvement prédit > 1%")
-	fmt.Println()
-	fmt.Println("⛓️  Chaque trade est enregistré sur Ethereum Sepolia")
-	fmt.Println("   Vérifiez sur: https://sepolia.etherscan.io/")
+	fmt.Println("📊 Capital total investi:")
+	total := 0.0
+	for _, sys := range systems {
+		total += sys.TradingEngine.GetPortfolio().InitialBalance
+	}
+	fmt.Printf("   → $%.2f USD\n", total)
 	fmt.Println()
 	fmt.Println(strings.Repeat("=", 60))
 	fmt.Println("Appuyez sur Ctrl+C pour arrêter le système")
