@@ -1,12 +1,6 @@
-"""
-Nexus Trade - Strategies Package
-Stratégies de trading prouvées + Filtre IA
-"""
-
 __version__ = "2.0.0"
 __author__ = "Nexus Trade"
 
-# Exports pour utilisation facile
 from .classic_strategy.proven_strategies import ProvenStrategies
 
 try:

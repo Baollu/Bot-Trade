@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-"""
-🔴 TRADING EN TEMPS RÉEL (SIMULATION)
-Récupère les données Bitcoin en live et analyse toutes les heures
-⚠️ ATTENTION: Mode SIMULATION - Aucun trade réel !
-"""
-
 import requests
 import pandas as pd
 import time
@@ -13,9 +7,6 @@ from ai.ai_signal_filter import AISignalFilter
 
 
 def get_current_bitcoin_data(lookback_hours=200):
-    """
-    Récupère les données Bitcoin récentes
-    """
     url = "https://api.binance.com/api/v3/klines"
 
     params = {
@@ -43,23 +34,13 @@ def get_current_bitcoin_data(lookback_hours=200):
 
 
 def analyze_and_display(strategy, df):
-    """
-    Analyse et affiche les résultats
-    """
     result = strategy.analyze(df)
 
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Header
-    print("\n" + "=" * 70)
-    print(f"⏰ {current_time}")
-    print("=" * 70)
-
-    # Prix actuel
     current_price = result['metrics']['price']
     print(f"\n💰 Bitcoin: ${current_price:,.2f}")
 
-    # Décision
     decision_emoji = {
         'BUY': '🟢',
         'SELL': '🔴',
@@ -67,46 +48,34 @@ def analyze_and_display(strategy, df):
     }
 
     emoji = decision_emoji.get(result['decision'], '⚪')
-    print(f"\n{emoji} DÉCISION: {result['decision']}")
-    print(f"🎲 Confiance: {result['confidence']:.0%}")
+    print(f"\n{emoji} DECISION: {result['decision']}")
+    print(f"🎲 Confidence: {result['confidence']:.0%}")
 
-    # Filtre IA
     if 'ai_filter' in result:
         ai_emoji = '✅' if result['ai_filter'] == 'APPROVED' else '❌' if result['ai_filter'] == 'REJECTED' else '⚠️'
-        print(f"\n🤖 Filtre IA: {ai_emoji} {result['ai_filter']}")
-        print(f"   Confiance IA: {result.get('ai_confidence', 0):.0%}")
+        print(f"\n🤖 Filter IA: {ai_emoji} {result['ai_filter']}")
+        print(f"   Confidence IA: {result.get('ai_confidence', 0):.0%}")
 
-    # Raisons
-    print(f"\n📊 Raisons ({len(result['reasons'])}):")
+    print(f"\n📊 Reasons ({len(result['reasons'])}):")
     for reason in result['reasons'][:5]:  # Max 5 raisons
         print(f"   • {reason}")
 
-    # Action recommandée
     print("\n💡 Action:")
     if result['decision'] == 'BUY' and result['confidence'] > 0.65:
-        print("   ✅ Signal d'achat fort - Position possible")
+        print("   ✅ Signal buying strong - Position possible")
         print(f"   📌 Stop-loss: ${current_price * 0.98:,.2f} (-2%)")
         print(f"   📌 Target: ${current_price * 1.03:,.2f} (+3%)")
     elif result['decision'] == 'SELL' and result['confidence'] > 0.65:
-        print("   ⚠️ Signal de vente - Fermer positions")
+        print("   ⚠️ Signal sell - Close positions")
     else:
-        print("   ⏸️ Pas de signal clair - Rester à l'écart")
-
-    print("\n" + "-" * 70)
-
+        print("   ⏸️ No signal")
 
 def live_monitoring(check_interval_minutes=60):
-    """
-    Monitoring en temps réel (boucle infinie)
-    """
-    print("=" * 70)
     print("🔴 MONITORING EN TEMPS RÉEL - SIMULATION")
-    print("=" * 70)
     print("\n⚠️  MODE SIMULATION - Aucun trade réel")
     print(f"🔄 Vérification toutes les {check_interval_minutes} minutes")
     print("\n💡 Appuie sur Ctrl+C pour arrêter\n")
 
-    # Charge la stratégie
     try:
         strategy = AISignalFilter(model_path='ai/signal_filter.pkl')
         print("✅ Stratégie IA chargée")

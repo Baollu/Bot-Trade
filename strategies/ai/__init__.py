@@ -1,8 +1,3 @@
-"""
-Filtre IA pour Signaux de Trading
-Approche Hedge Funds (Renaissance Technologies, Two Sigma)
-"""
-
 try:
     from .ai_signal_filter import AISignalFilter
     AI_AVAILABLE = True

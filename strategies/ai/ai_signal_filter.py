@@ -1,16 +1,4 @@
 """
-AI SIGNAL FILTER & ENHANCER
-Approche utilisée par les hedge funds professionnels
-
-Au lieu de prédire le prix (trop incertain), l'IA FILTRE les signaux:
-"Quand RSI+MACD+Bollinger disent BUY, est-ce que ça marche vraiment ?"
-
-Cette approche est utilisée par:
-- Renaissance Technologies (Medallion Fund: +66% annualisé)
-- Two Sigma
-- D.E. Shaw
-- Citadel
-
 Algorithme: XGBoost (meilleur que LSTM pour ce use case)
 Source: "Machine Learning for Asset Managers" (Marcos Lopez de Prado, 2020)
 """
@@ -32,41 +20,25 @@ from classic_strategy.proven_strategies import ProvenStrategies
 
 
 class AISignalFilter:
-    """
-    IA qui filtre et améliore les signaux des stratégies classiques
-
-    Principe:
-    1. Les stratégies classiques génèrent des signaux
-    2. L'IA apprend quand ces signaux fonctionnent vraiment
-    3. L'IA filtre les mauvais signaux et boost les bons
-
-    Win rate attendu: +5-15% vs stratégies seules
-    """
-
     def __init__(self, model_path: Optional[str] = 'ai/signal_filter.pkl'):
         self.name = "AI Signal Filter & Enhancer"
         self.model_path = model_path
         self.model = None
         self.ai_enabled = False
 
-        # Stratégies classiques (TOUJOURS utilisées)
         self.proven_strategies = ProvenStrategies()
 
-        # Essaie de charger le modèle
         self._load_model()
 
         if self.ai_enabled:
             print(f"✅ {self.name} initialized WITH AI")
             print(f"🤖 Model: {model_path}")
-            print(f"📊 Approach: Signal Validation (Renaissance/Two Sigma style)")
         else:
             print(f"⚠️ {self.name} initialized WITHOUT AI")
-            print(f"📊 Using proven strategies only (still 65-75% win rate)")
+            print(f"📊 Using proven strategies only")
 
     def _load_model(self):
-        """Charge le modèle XGBoost si disponible"""
         if not XGBOOST_AVAILABLE:
-            print("❌ xgboost not installed. Install with: pip install xgboost")
             return
 
         try:
@@ -83,18 +55,8 @@ class AISignalFilter:
             self.ai_enabled = False
 
     def analyze(self, df: pd.DataFrame) -> Dict:
-        """
-        Analyse avec stratégies + filtre IA
-
-        Process:
-        1. Stratégies classiques génèrent signal
-        2. Si IA disponible, filtre/améliore le signal
-        3. Retourne signal final
-        """
-        # 1. Signal des stratégies classiques (TOUJOURS)
         classic_signal = self.proven_strategies.analyze(df)
 
-        # 2. Si IA disponible, filtre le signal
         if self.ai_enabled:
             try:
                 ai_filtered = self._filter_signal(df, classic_signal)
@@ -104,27 +66,15 @@ class AISignalFilter:
                 print(f"   Falling back to proven strategies")
                 return classic_signal
         else:
-            # Pas d'IA → retourne signal classique
             return classic_signal
 
     def _filter_signal(self, df: pd.DataFrame, classic_signal: Dict) -> Dict:
-        """
-        L'IA filtre et améliore le signal classique
-
-        L'IA apprend:
-        "Dans ce contexte de marché, avec ces signaux des stratégies,
-         est-ce que le trade va probablement fonctionner ?"
-        """
-        # Prépare les features pour l'IA
         features = self._prepare_features(df, classic_signal)
 
-        # Prédiction de l'IA: "Ce signal va-t-il fonctionner ?"
         signal_quality = self.model.predict_proba(features)[0]
-        # [prob_bad_signal, prob_good_signal]
 
         prob_good = signal_quality[1]
 
-        # Décision finale basée sur IA
         if classic_signal['decision'] == 'BUY':
             if prob_good > 0.70:  # IA confirme fortement
                 return {
@@ -144,7 +94,7 @@ class AISignalFilter:
                     'ai_confidence': prob_good,
                     'strategy': 'AI_FILTERED_PROVEN'
                 }
-            else:  # IA rejette
+            else:
                 return {
                     **classic_signal,
                     'decision': 'HOLD',
@@ -185,7 +135,7 @@ class AISignalFilter:
                     'reasons': classic_signal['reasons'] + ["IA: Signal filtré (probabilité faible)"]
                 }
 
-        else:  # HOLD
+        else:
             return {
                 **classic_signal,
                 'ai_filter': 'NEUTRAL',
@@ -194,19 +144,12 @@ class AISignalFilter:
             }
 
     def _prepare_features(self, df: pd.DataFrame, classic_signal: Dict) -> np.ndarray:
-        """
-        Prépare features pour l'IA
-
-        Features = Signaux des stratégies + Contexte marché
-        """
         last = df.iloc[-1]
 
-        # Features des signaux (binary encoding)
         signals = classic_signal['signals']
 
         feature_vector = []
 
-        # 1. Signaux des 5 stratégies (15 features)
         for strategy_name in ['bollinger_mean_reversion', 'rsi_divergence',
                              'macd_histogram', 'vwap', 'ema_crossover']:
             sig = signals[strategy_name]
@@ -215,7 +158,6 @@ class AISignalFilter:
             feature_vector.append(1 if sig['decision'] == 'SELL' else 0)
             feature_vector.append(sig['confidence'])
 
-        # 2. Contexte marché (10 features)
         metrics = classic_signal['metrics']
         feature_vector.extend([
             metrics['rsi'] / 100,  # Normalisé 0-1
@@ -223,25 +165,18 @@ class AISignalFilter:
             metrics['distance_from_vwap'],
             metrics['bollinger_position'],
             last['volume'] / df['volume'].rolling(20).mean().iloc[-1] if len(df) >= 20 else 1.0,
-            # Volatilité
             last['atr'] / last['close'] if 'atr' in last else 0.02,
-            # Trend strength
             (last['ema_12'] - last['ema_26']) / last['close'] if 'ema_12' in last else 0,
-            # 3 derniers returns
             df['close'].pct_change().iloc[-1],
             df['close'].pct_change().iloc[-2] if len(df) >= 2 else 0,
             df['close'].pct_change().iloc[-3] if len(df) >= 3 else 0,
         ])
 
-        # 3. Confiance globale du signal classique (1 feature)
         feature_vector.append(classic_signal['confidence'])
 
         return np.array(feature_vector).reshape(1, -1)
 
     def backtest(self, df: pd.DataFrame, initial_balance: float = 10000) -> Dict:
-        """
-        Backtest avec filtre IA
-        """
         balance = initial_balance
         crypto_holding = 0
         trades = []
@@ -252,7 +187,6 @@ class AISignalFilter:
 
             current_price = df.iloc[i]['close']
 
-            # Seuil de confiance ajusté avec IA
             confidence_threshold = 0.65 if self.ai_enabled else 0.60
 
             if signal['decision'] == 'BUY' and signal['confidence'] > confidence_threshold and balance > 0:
