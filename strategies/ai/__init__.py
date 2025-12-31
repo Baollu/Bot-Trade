@@ -1,3 +1,13 @@
-from .ai_strategy import AIStrategy
+"""
+Filtre IA pour Signaux de Trading
+Approche Hedge Funds (Renaissance Technologies, Two Sigma)
+"""
 
-__all__ = ['AIStrategy']
+try:
+    from .ai_signal_filter import AISignalFilter
+    AI_AVAILABLE = True
+except ImportError:
+    AI_AVAILABLE = False
+    AISignalFilter = None
+
+__all__ = ['AISignalFilter', 'AI_AVAILABLE']

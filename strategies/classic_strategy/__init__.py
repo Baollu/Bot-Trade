@@ -1,3 +1,8 @@
-from .classic_strategy import ClassicStrategy
+"""
+Stratégies de Trading Classiques PROUVÉES
+Sources: Bollinger, Wilder, Appel, Turtle Traders, Market Makers
+"""
 
-__all__ = ['ClassicStrategy']
+from .proven_strategies import ProvenStrategies
+
+__all__ = ['ProvenStrategies']

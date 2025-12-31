@@ -1,0 +1,39 @@
+{
+    "_comment": "Configuration du Bot de Trading Automatique",
+
+    "initial_balance": 10000,
+    "_initial_balance_comment": "Capital de départ en USDT",
+
+    "max_daily_loss_percent": 10,
+    "_max_daily_loss_comment": "Si perte > X% dans la journée → STOP jusqu'à demain",
+
+    "position_size_percent": 2,
+    "_position_size_comment": "Taille de chaque position (2% du capital par trade)",
+
+    "stop_loss_percent": 2,
+    "_stop_loss_comment": "Stop-loss automatique à -2% par position",
+
+    "take_profit_percent": 3,
+    "_take_profit_comment": "Take-profit automatique à +3% par position",
+
+    "min_confidence": 0.65,
+    "_min_confidence_comment": "Confiance minimum pour ouvrir position (65%)",
+
+    "max_positions": 5,
+    "_max_positions_comment": "Nombre maximum de positions simultanées",
+
+    "check_interval_minutes": 5,
+    "_check_interval_comment": "Vérifier le marché toutes les X minutes",
+
+    "use_ai_filter": true,
+    "_use_ai_filter_comment": "Utiliser le filtre IA (true) ou stratégies seules (false)",
+
+    "ai_model_path": "../strategies/ai/signal_filter.pkl",
+    "_ai_model_path_comment": "Chemin vers le modèle IA entraîné",
+
+    "symbol": "BTCUSDT",
+    "_symbol_comment": "Paire de trading (Bitcoin/USDT)",
+
+    "dry_run": true,
+    "_dry_run_comment": "MODE SIMULATION (true) ou MODE RÉEL (false) - ATTENTION !"
+}
